@@ -1,0 +1,24 @@
+error[E0277]: `fn() -> impl Future<Output = impl IntoResponse> {handler}` has an input or output type that cannot be described in OpenAPI
+ --> tests/ui/unsupported_response.rs:8:17
+  |
+8 |     let _ = get(handler);
+  |             --- ^^^^^^^ unsupported handler signature
+  |             |
+  |             required by a bound introduced by this call
+  |
+  = help: the trait `AutoHandler<_, _>` is not implemented for fn item `fn() -> impl Future<Output = impl IntoResponse> {handler}`
+  = note: every extractor must implement `axum_openapi::ApiInput`, and the return type must implement `axum_openapi::ApiOutput`
+  = note: supported return types include `Json<T>`, `Result<T, E>`, `(StatusCode, T)`, `()`, `String`, and `Html<_>`; opaque `impl IntoResponse` return types cannot be inspected
+  = note: implement `ApiInput` / `ApiOutput` for custom extractors and response wrappers
+note: required by a bound in `axum_openapi::routing::get`
+ --> src/routing.rs
+  |
+  |             H: AutoHandler<T, S>,
+  |                ^^^^^^^^^^^^^^^^^ required by this bound in `get`
+...
+  | top_level_fn!(get, Method::GET, "get");
+  | --------------------------------------
+  | |             |
+  | |             required by a bound in this function
+  | in this macro invocation
+  = note: this error originates in the macro `top_level_fn` (in Nightly builds, run with -Z macro-backtrace for more info)
