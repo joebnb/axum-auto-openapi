@@ -7,10 +7,10 @@ error[E0277]: `fn(Custom) -> impl Future<Output = ()> {handler}` has an input or
    |             required by a bound introduced by this call
    |
    = help: the trait `AutoHandler<_, _>` is not implemented for fn item `fn(Custom) -> impl Future<Output = ()> {handler}`
-   = note: every extractor must implement `axum_openapi::ApiInput`, and the return type must implement `axum_openapi::ApiOutput`
+   = note: every extractor must implement `axum_auto_openapi::ApiInput`, and the return type must implement `axum_auto_openapi::ApiOutput`
    = note: supported return types include `Json<T>`, `Result<T, E>`, `(StatusCode, T)`, `()`, `String`, and `Html<_>`; opaque `impl IntoResponse` return types cannot be inspected
    = note: implement `ApiInput` / `ApiOutput` for custom extractors and response wrappers
-note: required by a bound in `axum_openapi::routing::get`
+note: required by a bound in `axum_auto_openapi::routing::get`
   --> src/routing.rs
    |
    |             H: AutoHandler<T, S>,

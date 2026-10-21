@@ -2,7 +2,7 @@
 //!
 //! These functions mirror [`axum::routing`] but additionally analyze the
 //! handler signature. Replacing `use axum::routing::{get, post}` with
-//! `use axum_openapi::routing::{get, post}` is the only change most handlers
+//! `use axum_auto_openapi::routing::{get, post}` is the only change most handlers
 //! need.
 
 use axum::http::Method;
@@ -18,10 +18,10 @@ use crate::AutoHandler;
 /// recently added method. This allows fluent construction:
 ///
 /// ```rust,no_run
-/// # use axum_openapi::routing::get;
+/// # use axum_auto_openapi::routing::get;
 /// # async fn list() {}
 /// # async fn create() {}
-/// let router: axum_openapi::ApiMethodRouter = get(list)
+/// let router: axum_auto_openapi::ApiMethodRouter = get(list)
 ///     .summary("List items")
 ///     .post(create)
 ///     .summary("Create an item");
@@ -136,13 +136,13 @@ impl<S> ApiMethodRouter<S> {
     /// extractors.
     ///
     /// ```rust,no_run
-    /// # use axum_openapi::routing::post;
+    /// # use axum_auto_openapi::routing::post;
     /// # use schemars::JsonSchema;
     /// # use serde::Deserialize;
     /// # #[derive(Deserialize, JsonSchema)]
     /// # struct Login { email: String }
     /// # async fn login(_: axum::body::Bytes) {}
-    /// let route: axum_openapi::ApiMethodRouter = post(login).json_body::<Login>();
+    /// let route: axum_auto_openapi::ApiMethodRouter = post(login).json_body::<Login>();
     /// # let _ = route;
     /// ```
     pub fn json_body<T: JsonSchema + 'static>(mut self) -> Self {

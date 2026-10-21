@@ -4,8 +4,8 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
-use axum_openapi::routing::{get, post};
-use axum_openapi::Router;
+use axum_auto_openapi::routing::{get, post};
+use axum_auto_openapi::Router;
 use serde_json::Value;
 use tower::ServiceExt;
 

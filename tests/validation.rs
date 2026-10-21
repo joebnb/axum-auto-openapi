@@ -9,8 +9,8 @@ mod common;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::Json;
-use axum_openapi::routing::{get, post};
-use axum_openapi::{OpenApiDocument, Router};
+use axum_auto_openapi::routing::{get, post};
+use axum_auto_openapi::{OpenApiDocument, Router};
 use serde_json::Value;
 
 fn validate(document: &OpenApiDocument) {

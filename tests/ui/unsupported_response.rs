@@ -1,4 +1,4 @@
-use axum_openapi::routing::get;
+use axum_auto_openapi::routing::get;
 
 async fn handler() -> impl axum::response::IntoResponse {
     "ok"

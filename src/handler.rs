@@ -20,7 +20,7 @@ use crate::{ApiInput, ApiOutput};
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has an input or output type that cannot be described in OpenAPI",
     label = "unsupported handler signature",
-    note = "every extractor must implement `axum_openapi::ApiInput`, and the return type must implement `axum_openapi::ApiOutput`",
+    note = "every extractor must implement `axum_auto_openapi::ApiInput`, and the return type must implement `axum_auto_openapi::ApiOutput`",
     note = "supported return types include `Json<T>`, `Result<T, E>`, `(StatusCode, T)`, `()`, `String`, and `Html<_>`; opaque `impl IntoResponse` return types cannot be inspected",
     note = "implement `ApiInput` / `ApiOutput` for custom extractors and response wrappers"
 )]

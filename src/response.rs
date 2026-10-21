@@ -23,7 +23,7 @@ use crate::operation::{OperationDescriptor, ResponseKind};
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be described in the OpenAPI document",
     label = "this handler return type must implement `ApiOutput`",
-    note = "return `Json<T>`, `Result<T, E>`, `(StatusCode, Json<T>)`, `()` or implement `axum_openapi::ApiOutput` for your wrapper"
+    note = "return `Json<T>`, `Result<T, E>`, `(StatusCode, Json<T>)`, `()` or implement `axum_auto_openapi::ApiOutput` for your wrapper"
 )]
 pub trait ApiOutput {
     /// Add this response to the operation.

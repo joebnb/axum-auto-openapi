@@ -1,10 +1,10 @@
 [package]
-name = "axum-openapi"
+name = "axum-auto-openapi"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Zero-annotation OpenAPI 3.1 generation for Axum 0.8"
-repository = "https://github.com/joebnb/axum-openapi"
+repository = "https://github.com/joebnb/axum-auto-openapi"
 readme = "README.md"
 keywords = ["axum", "openapi", "schema", "http", "web"]
 categories = ["web-programming::http-server"]

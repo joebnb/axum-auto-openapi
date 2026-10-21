@@ -1,14 +1,14 @@
 //! Zero-annotation OpenAPI 3.1 generation for [Axum] 0.8.
 //!
-//! `axum-openapi` replaces the router registration layer. Handlers stay
+//! `axum-auto-openapi` replaces the router registration layer. Handlers stay
 //! ordinary axum handlers; the extractor and response types are analyzed when
 //! routes are registered, and the document is rendered once with
 //! [`Router::finish`].
 //!
 //! ```
 //! use axum::Json;
-//! use axum_openapi::routing::{get, post};
-//! use axum_openapi::Router;
+//! use axum_auto_openapi::routing::{get, post};
+//! use axum_auto_openapi::Router;
 //! use schemars::JsonSchema;
 //! use serde::{Deserialize, Serialize};
 //!

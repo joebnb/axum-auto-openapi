@@ -6,8 +6,8 @@ mod common;
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
-use axum_openapi::routing::get;
-use axum_openapi::Router;
+use axum_auto_openapi::routing::get;
+use axum_auto_openapi::Router;
 use tower::ServiceExt;
 
 #[tokio::test]

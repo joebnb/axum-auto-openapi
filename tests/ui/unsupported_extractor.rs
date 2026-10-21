@@ -1,6 +1,6 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use axum_openapi::routing::get;
+use axum_auto_openapi::routing::get;
 
 struct Custom;
 

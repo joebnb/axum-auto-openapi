@@ -21,7 +21,7 @@ use crate::operation::OperationDescriptor;
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot be described in the OpenAPI document",
     label = "this extractor must implement `ApiInput`",
-    note = "implement `axum_openapi::ApiInput` for your extractor, or use `Json<T>`, `Path<T>`, `Query<T>` or `State<T>`"
+    note = "implement `axum_auto_openapi::ApiInput` for your extractor, or use `Json<T>`, `Path<T>`, `Query<T>` or `State<T>`"
 )]
 pub trait ApiInput {
     /// Add this extractor's metadata to an operation.

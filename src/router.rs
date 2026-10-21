@@ -43,8 +43,8 @@ struct SwaggerConfig {
 /// ```rust,no_run
 /// use axum::extract::State;
 /// use axum::Json;
-/// use axum_openapi::routing::get;
-/// use axum_openapi::Router;
+/// use axum_auto_openapi::routing::get;
+/// use axum_auto_openapi::Router;
 ///
 /// #[derive(Clone)]
 /// struct AppState;
@@ -88,8 +88,8 @@ where
     /// else pins the type down:
     ///
     /// ```rust,no_run
-    /// # use axum_openapi::routing::get;
-    /// # use axum_openapi::Router;
+    /// # use axum_auto_openapi::routing::get;
+    /// # use axum_auto_openapi::Router;
     /// # async fn handler() {}
     /// let (app, document) = Router::<()>::new().route("/", get(handler)).finish();
     /// # let _ = (app, document);
@@ -474,7 +474,7 @@ where
     /// wants to state the behavior explicitly:
     ///
     /// ```rust,no_run
-    /// # use axum_openapi::{Router, routing::get};
+    /// # use axum_auto_openapi::{Router, routing::get};
     /// # async fn login() {}
     /// # async fn wx_login() {}
     /// let auth = Router::<()>::new().route("/login", get(login));
@@ -521,7 +521,7 @@ where
     /// a sub-router to group its operations in generated documentation:
     ///
     /// ```rust,no_run
-    /// # use axum_openapi::{Router, routing::get};
+    /// # use axum_auto_openapi::{Router, routing::get};
     /// # async fn list_products() {}
     /// let products = Router::<()>::new()
     ///     .route("/products", get(list_products))
@@ -558,8 +558,8 @@ where
     /// common case — call this only to turn the routes off:
     ///
     /// ```rust,no_run
-    /// # use axum_openapi::routing::get;
-    /// # use axum_openapi::Router;
+    /// # use axum_auto_openapi::routing::get;
+    /// # use axum_auto_openapi::Router;
     /// # async fn health() {}
     /// let publish_docs = std::env::var("OPENAPI_ENABLED").is_ok_and(|value| value != "false");
     /// let api = Router::<()>::new()

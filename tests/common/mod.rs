@@ -5,8 +5,8 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use axum_openapi::routing::get;
-use axum_openapi::{Info, OpenApiDocument, Router, SecurityScheme, Server, Tag};
+use axum_auto_openapi::routing::get;
+use axum_auto_openapi::{Info, OpenApiDocument, Router, SecurityScheme, Server, Tag};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

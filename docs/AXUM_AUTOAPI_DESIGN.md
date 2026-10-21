@@ -1,11 +1,11 @@
-# axum-openapi — 设计参考文档
+# axum-auto-openapi — 设计参考文档
 
 > 状态：核心实现已完成，第 13 节验收标准全部通过  
 > 目标环境：Rust stable、Axum 0.8.x、OpenAPI 3.1、schemars 1.x
 
 ## 1. 项目定位
 
-**axum-openapi** 是一个通过替换路由注册层，为原生 Axum Handler 自动生成 OpenAPI Schema 的 Rust crate。
+**axum-auto-openapi** 是一个通过替换路由注册层，为原生 Axum Handler 自动生成 OpenAPI Schema 的 Rust crate。
 
 主要目标：
 
@@ -28,7 +28,7 @@
 use axum::{extract::{Path, Query}, Json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use axum_openapi::{Router, routing::{get, post}};
+use axum_auto_openapi::{Router, routing::{get, post}};
 
 #[derive(Serialize, JsonSchema)]
 struct User {
@@ -49,7 +49,7 @@ async fn create_user(Json(input): Json<CreateUser>) -> Json<User> {
     Json(User { id: 1, name: input.name })
 }
 
-fn app() -> (axum::Router, axum_openapi::OpenApiDocument) {
+fn app() -> (axum::Router, axum_auto_openapi::OpenApiDocument) {
     Router::<()>::new()
         .route("/users", post(create_user))
         .route("/users/{id}", get(get_user))
@@ -99,7 +99,7 @@ paths:
 用户 Handler (async fn)
        │
        ▼
-axum_openapi::routing::get/post/...
+axum_auto_openapi::routing::get/post/...
        │
        ├── Handler 签名分析：输入 Extractor、输出类型
        │        │
@@ -108,7 +108,7 @@ axum_openapi::routing::get/post/...
        └── axum::routing::get/post/... → 原生 MethodRouter
                           │
                           ▼
-                 axum_openapi::Router::route
+                 axum_auto_openapi::Router::route
                           │
               ┌───────────┴───────────┐
               ▼                       ▼
@@ -325,7 +325,7 @@ MVP 可先 inline Schema，但正式版本应：
 ## 11. 建议 crate 结构
 
 ```text
-axum-openapi/
+axum-auto-openapi/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs

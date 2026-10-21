@@ -1,8 +1,8 @@
-# axum-openapi
+# axum-auto-openapi
 
 Zero-annotation OpenAPI 3.1 generation for [Axum](https://github.com/tokio-rs/axum) 0.8.
 
-Register routes with `axum_openapi::Router` and `axum_openapi::routing::{get, post, ...}` instead of the axum equivalents. The generator inspects each handler's extractors and return type when the route is registered, then renders a single OpenAPI document in `finish()`. Requests are still served by axum itself: there is no reflection over a finished router and no per-request document overhead.
+Register routes with `axum_auto_openapi::Router` and `axum_auto_openapi::routing::{get, post, ...}` instead of the axum equivalents. The generator inspects each handler's extractors and return type when the route is registered, then renders a single OpenAPI document in `finish()`. Requests are still served by axum itself: there is no reflection over a finished router and no per-request document overhead.
 
 Design rationale and the acceptance results are documented in [`docs/AXUM_AUTOAPI_DESIGN.md`](docs/AXUM_AUTOAPI_DESIGN.md).
 
@@ -20,7 +20,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.8"
-axum-openapi = { git = "https://github.com/joebnb/axum-openapi.git", features = ["swagger-ui"] }
+axum-auto-openapi = { git = "https://github.com/joebnb/axum-auto-openapi.git", features = ["swagger-ui"] }
 schemars = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
@@ -31,8 +31,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 ```rust
 use axum::extract::Path;
 use axum::Json;
-use axum_openapi::routing::get;
-use axum_openapi::Router;
+use axum_auto_openapi::routing::get;
+use axum_auto_openapi::Router;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -206,6 +206,10 @@ let api = Router::<()>::new()
     .documentation(publish_docs);
 ```
 
+The crate never reads the environment itself; how `publish_docs` is derived is
+the application's decision. The name `OPENAPI_ENABLED` above is only a
+convention — any configuration source works.
+
 `documentation(false)` leaves both routes unmounted; requests to them fall
 through to whatever fallback the application installs (usually a 404). The
 default paths are exported as `DEFAULT_DOCUMENT_PATH` and `DEFAULT_DOCS_PATH`
@@ -259,7 +263,7 @@ Custom extractors and response wrappers can participate in the document by imple
 
 - Rust stable
 - Axum `0.8`
-- schemars `1` (re-exported as `axum_openapi::schemars` and `axum_openapi::JsonSchema`)
+- schemars `1` (re-exported as `axum_auto_openapi::schemars` and `axum_auto_openapi::JsonSchema`)
 
 ## Development
 
