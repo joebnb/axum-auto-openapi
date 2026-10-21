@@ -135,6 +135,15 @@ pub(crate) struct RequestBody {
 pub(crate) struct ResponseSpec {
     pub(crate) description: Option<String>,
     pub(crate) content: BTreeMap<String, BodySchema>,
+    pub(crate) headers: BTreeMap<String, HeaderSpec>,
+}
+
+/// One documented response header (`responses.*.headers`).
+#[derive(Clone)]
+pub(crate) struct HeaderSpec {
+    pub(crate) description: Option<String>,
+    pub(crate) required: bool,
+    pub(crate) schema: BodySchema,
 }
 
 /// Everything the OpenAPI document needs to know about one handler.
@@ -307,7 +316,69 @@ impl OperationDescriptor {
             .or_insert_with(|| ResponseSpec {
                 description,
                 content: BTreeMap::new(),
+                headers: BTreeMap::new(),
             });
+    }
+
+    /// Document a response header, creating its status entry when needed.
+    pub fn response_header<T: JsonSchema + 'static>(
+        &mut self,
+        status: impl Into<StatusKey>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        required: bool,
+    ) {
+        self.insert_header(
+            status.into(),
+            name.into(),
+            Some(description.into()),
+            required,
+            BodySchema::Typed(SchemaOf::of::<T>()),
+        );
+    }
+
+    /// Document a response header from a raw JSON Schema value.
+    pub fn raw_response_header(
+        &mut self,
+        status: impl Into<StatusKey>,
+        name: impl Into<String>,
+        schema: Value,
+        description: impl Into<String>,
+        required: bool,
+    ) {
+        self.insert_header(
+            status.into(),
+            name.into(),
+            Some(description.into()),
+            required,
+            BodySchema::Raw(schema),
+        );
+    }
+
+    fn insert_header(
+        &mut self,
+        status: StatusKey,
+        name: String,
+        description: Option<String>,
+        required: bool,
+        schema: BodySchema,
+    ) {
+        let response = self
+            .responses
+            .entry(status.0)
+            .or_insert_with(|| ResponseSpec {
+                description: None,
+                content: BTreeMap::new(),
+                headers: BTreeMap::new(),
+            });
+        response.headers.insert(
+            name,
+            HeaderSpec {
+                description,
+                required,
+                schema,
+            },
+        );
     }
 
     pub(crate) fn insert_response(
@@ -323,6 +394,7 @@ impl OperationDescriptor {
             .or_insert_with(|| ResponseSpec {
                 description: description.clone(),
                 content: BTreeMap::new(),
+                headers: BTreeMap::new(),
             });
         if response.description.is_none() {
             response.description = description;

@@ -127,6 +127,41 @@ impl<S> ApiMethodRouter<S> {
         self
     }
 
+    /// Document a response header on the most recently added operation.
+    ///
+    /// ```rust,no_run
+    /// # use axum_auto_openapi::routing::post;
+    /// # async fn login() {}
+    /// let route: axum_auto_openapi::ApiMethodRouter = post(login)
+    ///     .response_header::<String>(200, "Set-Cookie", "Session cookie", false);
+    /// # let _ = route;
+    /// ```
+    pub fn response_header<T: JsonSchema + 'static>(
+        mut self,
+        status: impl Into<StatusKey>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        required: bool,
+    ) -> Self {
+        self.current()
+            .response_header::<T>(status, name, description, required);
+        self
+    }
+
+    /// Document a response header from a raw JSON Schema value.
+    pub fn raw_response_header(
+        mut self,
+        status: impl Into<StatusKey>,
+        name: impl Into<String>,
+        schema: serde_json::Value,
+        description: impl Into<String>,
+        required: bool,
+    ) -> Self {
+        self.current()
+            .raw_response_header(status, name, schema, description, required);
+        self
+    }
+
     /// Document a JSON request body with an explicit type.
     ///
     /// Handlers that read the body themselves (for example a `Bytes` body

@@ -51,6 +51,10 @@
 //! - `Query<T>` object fields, optionality, arrays, and nested objects.
 //! - `Result<T, E>` success and error responses.
 //! - `(StatusCode, T)` responses with runtime-selected status codes.
+//! - [`ApiResponse<T, STATUS>`](ApiResponse) for a status code fixed at
+//!   registration time; the body is still built by axum.
+//! - [`ApiResponseDefault<T>`](ApiResponseDefault) for a runtime-selected
+//!   status with a typed body.
 //! - `State<T>`, `Extension<T>`, header/request metadata and custom `ApiInput`
 //!   implementations.
 //!
@@ -92,7 +96,7 @@ pub use extract::ApiInput;
 pub use handler::AutoHandler;
 pub use openapi::{ApiKeyLocation, Info, OpenApiDocument, SecurityScheme, Server, Tag};
 pub use operation::{OperationDescriptor, ResponseKind, StatusKey};
-pub use response::ApiOutput;
+pub use response::{ApiOutput, ApiResponse, ApiResponseDefault};
 pub use router::{Router, DEFAULT_DOCS_PATH, DEFAULT_DOCUMENT_PATH};
 pub use routing::ApiMethodRouter;
 

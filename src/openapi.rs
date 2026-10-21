@@ -537,6 +537,25 @@ fn render_responses(
             value.insert("content".to_owned(), Value::Object(content));
         }
 
+        if !response.headers.is_empty() {
+            let mut headers = Map::new();
+            for (name, header) in &response.headers {
+                let mut rendered_header = Map::new();
+                if let Some(description) = &header.description {
+                    rendered_header.insert("description".to_owned(), json!(description));
+                }
+                if header.required {
+                    rendered_header.insert("required".to_owned(), json!(true));
+                }
+                rendered_header.insert(
+                    "schema".to_owned(),
+                    render_body_schema(&header.schema, registry),
+                );
+                headers.insert(name.clone(), Value::Object(rendered_header));
+            }
+            value.insert("headers".to_owned(), Value::Object(headers));
+        }
+
         rendered.insert(status.clone(), Value::Object(value));
     }
 

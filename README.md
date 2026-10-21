@@ -101,6 +101,8 @@ with query parameters, status codes, security schemes, and explicit tags.
 | `String`, `&'static str`, `Html<_>`, `Bytes`, `Response` output | Text, HTML, binary, or opaque response |
 | `Result<T, E>` | Success and error branches (error uses `default` unless you add a status) |
 | `StatusCode`, `(StatusCode, T)` | `default` response, because the status is only known at runtime |
+| `ApiResponse<T, STATUS>` | `STATUS` response, with the body described by `T` |
+| `ApiResponseDefault<T>` | `default` response with the body described by `T` |
 | `()` | Empty response |
 
 Schemas come from [`schemars`](https://docs.rs/schemars). Object and polymorphic models are hoisted into `components.schemas`; identical models are deduplicated, and conflicting schemars names receive deterministic `_2`, `_3`, ... suffixes.
@@ -190,6 +192,71 @@ post(webhook)
     .raw_body("application/cloudevents+json", true, json!({ "type": "object" }));
 ```
 
+### Responses with a declared status
+
+A bare `Response` knows neither its status code nor its body at registration
+time, so it is documented as an empty `200`. When the status is fixed, wrap the
+body in `ApiResponse<T, STATUS>`. `T` is whatever the handler would return
+anyway, and the wrapper hands response building back to axum:
+
+```rust
+use axum::response::{IntoResponse, Redirect, Response};
+use axum_auto_openapi::ApiResponse;
+
+async fn create_device(Json(input): Json<NewDevice>) -> ApiResponse<Json<Device>, 201> {
+    ApiResponse::json(Device::from(input))
+}
+
+async fn login_redirect() -> ApiResponse<Response, 302> {
+    ApiResponse::new(Redirect::temporary("/dashboard").into_response())
+}
+```
+
+`ApiResponse::json(value)` is shorthand for `ApiResponse::new(Json(value))`.
+Anything axum can turn into a response works as `T`, so headers, cookies and
+redirects are untouched — only the status code is replaced. The status is a
+const parameter because the document is built at startup.
+
+Three things the type cannot check for you:
+
+- `T` must be a single response type. `ApiResponse<Result<Json<T>, E>, 200>`
+  compiles, but replaces the status of the error branch too.
+- A status already present in an adopted `Response` is discarded silently.
+- `204` and `304` must not carry a body; declare them as
+  `ApiResponse::<(), 204>::new(())`.
+
+When the status is chosen at runtime but the body is still typed, use
+`ApiResponseDefault<T>` — the document records it under `default` and axum
+keeps whatever status the body produced:
+
+```rust
+async fn create(accepted: bool) -> ApiResponseDefault<Json<Device>> {
+    let status = if accepted { StatusCode::ACCEPTED } else { StatusCode::CREATED };
+    ApiResponseDefault::new((status, Json(Device::from(input))))
+}
+```
+
+### Response headers
+
+Headers are documented separately from the body, on the status they belong to:
+
+```rust
+use axum_auto_openapi::routing::post;
+
+post(login)
+    .response_header::<String>(200, "Set-Cookie", "Session cookie", false)
+    .raw_response_header(
+        429,
+        "Retry-After",
+        json!({ "type": "integer", "minimum": 0 }),
+        "Seconds until the next attempt is allowed",
+        true,
+    );
+```
+
+Both methods create the status entry when it does not exist yet, so they can be
+combined with `.response_with::<T>(...)` in any order.
+
 ### Publishing the documentation
 
 There is nothing to wire. `finish()` mounts the JSON document at
@@ -261,7 +328,7 @@ Custom extractors and response wrappers can participate in the document by imple
 
 ## Requirements
 
-- Rust stable
+- Rust 1.82 or newer
 - Axum `0.8`
 - schemars `1` (re-exported as `axum_auto_openapi::schemars` and `axum_auto_openapi::JsonSchema`)
 
@@ -306,4 +373,4 @@ TRYBUILD=overwrite cargo test --test compile
 
 ## License
 
-MIT
+BSD-3-Clause
