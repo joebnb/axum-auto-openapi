@@ -98,7 +98,10 @@
           "default": {
             "description": "Response with a runtime-selected status code"
           }
-        }
+        },
+        "tags": [
+          "failure"
+        ]
       }
     },
     "/users": {
@@ -221,7 +224,10 @@
             "description": "Response with a runtime-selected status code"
           }
         },
-        "summary": "Delete a user"
+        "summary": "Delete a user",
+        "tags": [
+          "users"
+        ]
       },
       "get": {
         "parameters": [
@@ -253,7 +259,10 @@
             "bearer": []
           }
         ],
-        "summary": "Fetch a user"
+        "summary": "Fetch a user",
+        "tags": [
+          "users"
+        ]
       }
     }
   },

@@ -20,6 +20,14 @@ use crate::openapi::{build_document, Info, OpenApiDocument, SecurityScheme, Serv
 use crate::operation::OperationDescriptor;
 use crate::routing::ApiMethodRouter;
 
+/// Path the JSON document is served from when [`Router::documentation`] is
+/// enabled and no explicit path was configured.
+pub const DEFAULT_DOCUMENT_PATH: &str = "/api/openapi";
+
+/// Path the Swagger UI page is served from when [`Router::documentation`] is
+/// enabled and no explicit path was configured.
+pub const DEFAULT_DOCS_PATH: &str = "/api/docs";
+
 #[cfg(feature = "swagger-ui")]
 #[derive(Clone, Debug)]
 struct SwaggerConfig {
@@ -63,6 +71,7 @@ pub struct Router<S = ()> {
     openapi_route: Option<String>,
     default_tag: Option<String>,
     infer_tags: bool,
+    documentation_enabled: bool,
     #[cfg(feature = "swagger-ui")]
     swagger: Option<SwaggerConfig>,
     _marker: PhantomData<fn() -> S>,
@@ -95,7 +104,8 @@ where
             security_schemes: BTreeMap::new(),
             openapi_route: None,
             default_tag: None,
-            infer_tags: false,
+            infer_tags: true,
+            documentation_enabled: true,
             #[cfg(feature = "swagger-ui")]
             swagger: None,
             _marker: PhantomData,
@@ -251,6 +261,7 @@ where
             openapi_route: self.openapi_route,
             default_tag: self.default_tag,
             infer_tags: self.infer_tags,
+            documentation_enabled: self.documentation_enabled,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -279,6 +290,7 @@ where
             openapi_route: self.openapi_route,
             default_tag: self.default_tag,
             infer_tags: self.infer_tags,
+            documentation_enabled: self.documentation_enabled,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -307,6 +319,7 @@ where
             openapi_route: self.openapi_route,
             default_tag: self.default_tag,
             infer_tags: self.infer_tags,
+            documentation_enabled: self.documentation_enabled,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -330,6 +343,7 @@ where
             openapi_route: self.openapi_route,
             default_tag: self.default_tag,
             infer_tags: self.infer_tags,
+            documentation_enabled: self.documentation_enabled,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -353,6 +367,7 @@ where
             openapi_route: self.openapi_route,
             default_tag: self.default_tag,
             infer_tags: self.infer_tags,
+            documentation_enabled: self.documentation_enabled,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -377,35 +392,46 @@ where
         let mut inner = self.inner;
         #[allow(unused_mut)]
         let mut spec_route = self.openapi_route;
+        #[cfg(feature = "swagger-ui")]
+        #[allow(unused_mut)]
+        let mut swagger = self.swagger;
 
-        #[cfg(feature = "swagger-ui")]
-        let swagger = self.swagger;
-        #[cfg(feature = "swagger-ui")]
-        if let Some(swagger) = &swagger {
-            if spec_route.is_none() {
-                spec_route = Some(swagger.spec_path.clone());
+        if self.documentation_enabled {
+            // A Swagger config without an explicit JSON route keeps supplying
+            // the spec path, as it did before zero-configuration defaults.
+            #[cfg(feature = "swagger-ui")]
+            if let Some(swagger) = &swagger {
+                if spec_route.is_none() {
+                    spec_route = Some(swagger.spec_path.clone());
+                }
             }
-        }
 
-        if let Some(path) = &spec_route {
-            assert!(
-                path.starts_with('/'),
-                "OpenAPI JSON route must start with '/', got `{path}`"
-            );
+            // Zero-configuration case: publish at the default paths.
+            let spec_path = spec_route
+                .get_or_insert_with(|| DEFAULT_DOCUMENT_PATH.to_owned())
+                .clone();
+
+            #[cfg(feature = "swagger-ui")]
+            if swagger.is_none() {
+                swagger = Some(SwaggerConfig {
+                    ui_path: DEFAULT_DOCS_PATH.to_owned(),
+                    spec_path: spec_path.clone(),
+                });
+            }
+
             let spec = Arc::new(document.to_value());
             let handler = move || {
                 let spec = Arc::clone(&spec);
                 async move { axum::Json(spec.as_ref().clone()) }
             };
-            inner = inner.route(path, axum::routing::get(handler));
-        }
+            inner = inner.route(&spec_path, axum::routing::get(handler));
 
-        #[cfg(feature = "swagger-ui")]
-        if let Some(swagger) = swagger {
-            let spec_path = spec_route.as_deref().unwrap_or(swagger.spec_path.as_str());
-            let html = crate::openapi::swagger_ui_html(spec_path);
-            let handler = move || async move { axum::response::Html(html) };
-            inner = inner.route(&swagger.ui_path, axum::routing::get(handler));
+            #[cfg(feature = "swagger-ui")]
+            if let Some(swagger) = swagger {
+                let html = crate::openapi::swagger_ui_html(&spec_path);
+                let handler = move || async move { axum::response::Html(html) };
+                inner = inner.route(&swagger.ui_path, axum::routing::get(handler));
+            }
         }
 
         (inner, document)
@@ -443,13 +469,9 @@ where
     /// Derive a tag for every operation that has no tag of its own from the
     /// router nesting structure.
     ///
-    /// The tag is the static nest path leading to the operation, with the
-    /// prefix shared by every nested router removed. A storefront `auth`
-    /// router and a Mini Program `wx/auth` router mounted under `/api` are
-    /// tagged `auth` and `wx/auth`. When every operation shares its whole
-    /// chain, the innermost router name is used instead, and routes
-    /// registered directly on the top-level router fall back to their first
-    /// static path segment.
+    /// This is already the default; the method stays for symmetry with
+    /// [`without_infer_tags`](Self::without_infer_tags) and for code that
+    /// wants to state the behavior explicitly:
     ///
     /// ```rust,no_run
     /// # use axum_openapi::{Router, routing::get};
@@ -465,11 +487,30 @@ where
     /// # let _ = api;
     /// ```
     ///
+    /// The tag is the static nest path leading to the operation, with the
+    /// prefix shared by every nested router removed. A storefront `auth`
+    /// router and a Mini Program `wx/auth` router mounted under `/api` are
+    /// tagged `auth` and `wx/auth`. When every operation shares its whole
+    /// chain, the innermost router name is used instead, and routes
+    /// registered directly on the top-level router fall back to their first
+    /// static path segment.
+    ///
     /// Explicit tags ([`routing::ApiMethodRouter::tag`](crate::routing::ApiMethodRouter::tag)
     /// or [`default_tag`](Self::default_tag)) and security metadata are
     /// unaffected.
     pub fn infer_tags(mut self) -> Self {
         self.infer_tags = true;
+        self
+    }
+
+    /// Leave operations untagged unless they were tagged explicitly.
+    ///
+    /// Use this when the path-derived groups do not match the API's
+    /// vocabulary and every operation is tagged with
+    /// [`tag`](crate::routing::ApiMethodRouter::tag) or
+    /// [`default_tag`](Self::default_tag) anyway.
+    pub fn without_infer_tags(mut self) -> Self {
+        self.infer_tags = false;
         self
     }
 
@@ -509,25 +550,67 @@ where
         self
     }
 
-    /// Serve the generated OpenAPI document as JSON at `path`.
+    /// Publish or withhold the documentation routes.
     ///
-    /// The document endpoint itself is not added to `paths`.
+    /// Documentation is on by default: [`finish`](Self::finish) mounts the
+    /// JSON document at [`DEFAULT_DOCUMENT_PATH`] and, with the `swagger-ui`
+    /// feature, the UI at [`DEFAULT_DOCS_PATH`]. No wiring is needed for the
+    /// common case — call this only to turn the routes off:
+    ///
+    /// ```rust,no_run
+    /// # use axum_openapi::routing::get;
+    /// # use axum_openapi::Router;
+    /// # async fn health() {}
+    /// let publish_docs = std::env::var("OPENAPI_ENABLED").is_ok_and(|value| value != "false");
+    /// let api = Router::<()>::new()
+    ///     .route("/health", get(health))
+    ///     .documentation(publish_docs);
+    /// # let _ = api;
+    /// ```
+    ///
+    /// `false` leaves the routes unmounted; the document is still built and
+    /// returned by `finish`, so logging and client tooling keep working.
+    /// Paths can be changed with [`openapi_json_route`](Self::openapi_json_route)
+    /// and [`swagger_ui`](Self::swagger_ui).
+    pub fn documentation(mut self, enabled: bool) -> Self {
+        self.documentation_enabled = enabled;
+        self
+    }
+
+    /// Serve the generated OpenAPI document as JSON at `path` instead of
+    /// [`DEFAULT_DOCUMENT_PATH`].
+    ///
+    /// The document endpoint itself is not added to `paths`. Suppress it at
+    /// runtime with [`documentation`](Self::documentation).
     pub fn openapi_json_route(mut self, path: impl Into<String>) -> Self {
-        self.openapi_route = Some(path.into());
+        let path = path.into();
+        assert!(
+            path.starts_with('/'),
+            "OpenAPI JSON route must start with '/', got `{path}`"
+        );
+        self.openapi_route = Some(path);
         self
     }
 
     /// Serve a Swagger UI page at `ui_path`, pointing at the OpenAPI JSON
-    /// route `spec_path`.
+    /// route `spec_path`, instead of [`DEFAULT_DOCS_PATH`] and
+    /// [`DEFAULT_DOCUMENT_PATH`].
     ///
     /// If no [`openapi_json_route`](Self::openapi_json_route) was configured,
     /// the document is automatically served at `spec_path`.
     #[cfg(feature = "swagger-ui")]
     pub fn swagger_ui(mut self, ui_path: impl Into<String>, spec_path: impl Into<String>) -> Self {
-        self.swagger = Some(SwaggerConfig {
-            ui_path: ui_path.into(),
-            spec_path: spec_path.into(),
-        });
+        let ui_path = ui_path.into();
+        let spec_path = spec_path.into();
+        assert!(
+            ui_path.starts_with('/'),
+            "Swagger UI route must start with '/', got `{ui_path}`"
+        );
+        assert!(
+            spec_path.starts_with('/'),
+            "OpenAPI JSON route must start with '/', got `{spec_path}`"
+        );
+        self.swagger = Some(SwaggerConfig { ui_path, spec_path });
         self
     }
 

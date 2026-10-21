@@ -56,9 +56,16 @@
 //!
 //! Business-specific status codes, security requirements, summaries and tags
 //! can be added fluently on [`routing::ApiMethodRouter`] or through
-//! [`OperationDescriptor`]. Tags can also be derived from the router tree with
-//! [`Router::infer_tags`], and a handler that parses its own `Bytes` body can
-//! declare the real shape with [`routing::ApiMethodRouter::json_body`].
+//! [`OperationDescriptor`]. Tags are derived from the router tree by default
+//! ([`Router::without_infer_tags`] turns that off), and a handler that parses
+//! its own `Bytes` body can declare the real shape with
+//! [`routing::ApiMethodRouter::json_body`].
+//!
+//! Documentation is published without wiring: the JSON document is served at
+//! [`DEFAULT_DOCUMENT_PATH`] and, with the `swagger-ui` feature, the UI at
+//! [`DEFAULT_DOCS_PATH`]. Use [`Router::documentation`] to withhold them, or
+//! [`Router::openapi_json_route`] / [`Router::swagger_ui`] to change the
+//! paths.
 //!
 //! ## What is not captured
 //!
@@ -86,7 +93,7 @@ pub use handler::AutoHandler;
 pub use openapi::{ApiKeyLocation, Info, OpenApiDocument, SecurityScheme, Server, Tag};
 pub use operation::{OperationDescriptor, ResponseKind, StatusKey};
 pub use response::ApiOutput;
-pub use router::Router;
+pub use router::{Router, DEFAULT_DOCS_PATH, DEFAULT_DOCUMENT_PATH};
 pub use routing::ApiMethodRouter;
 
 /// Re-exported for convenience so applications can use the same axum version.

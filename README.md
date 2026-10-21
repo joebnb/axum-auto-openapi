@@ -6,11 +6,33 @@ Register routes with `axum_openapi::Router` and `axum_openapi::routing::{get, po
 
 Design rationale and the acceptance results are documented in [`docs/AXUM_AUTOAPI_DESIGN.md`](docs/AXUM_AUTOAPI_DESIGN.md).
 
+## Minimal working example
+
+A complete project: two files, no annotations, no path configuration.
+
+`Cargo.toml`
+
+```toml
+[package]
+name = "users-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+axum-openapi = { git = "https://github.com/joebnb/axum-openapi.git", features = ["swagger-ui"] }
+schemars = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+```
+
+`src/main.rs`
+
 ```rust
 use axum::extract::Path;
 use axum::Json;
-use axum_openapi::routing::{get, post};
-use axum_openapi::{Info, Router};
+use axum_openapi::routing::get;
+use axum_openapi::Router;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -25,35 +47,46 @@ struct CreateUser {
     name: String,
 }
 
+async fn list_users() -> Json<Vec<User>> {
+    Json(vec![User { id: 1, name: "Ada".into() }])
+}
+
+async fn create_user(Json(input): Json<CreateUser>) -> Json<User> {
+    Json(User { id: 2, name: input.name })
+}
+
 async fn get_user(Path(id): Path<u64>) -> Json<User> {
     Json(User { id, name: "Ada".into() })
 }
 
-async fn create_user(Json(input): Json<CreateUser>) -> Json<User> {
-    Json(User { id: 1, name: input.name })
+#[tokio::main]
+async fn main() {
+    let (app, _document) = Router::<()>::new()
+        .route("/users", get(list_users).post(create_user))
+        .route("/users/{id}", get(get_user))
+        .finish();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
-
-let api = Router::<()>::new()
-    .info(Info::new("Users API", "0.1.0"))
-    .route("/users", post(create_user).summary("Create a user"))
-    .route("/users/{id}", get(get_user).summary("Fetch a user"))
-    .openapi_json_route("/openapi.json");
-
-let (app, document) = api.finish();
-
-// The same document is served at /openapi.json.
-println!("{}", document.to_json_pretty());
-
-let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-axum::serve(listener, app).await.unwrap();
 ```
 
-See [`examples/basic.rs`](examples/basic.rs) for a runnable version:
+Run it:
 
 ```bash
-cargo run --example basic
-curl http://127.0.0.1:3000/openapi.json
+cargo run
+curl http://127.0.0.1:3000/api/openapi   # OpenAPI 3.1 JSON
+open http://127.0.0.1:3000/api/docs      # Swagger UI (needs `swagger-ui`)
 ```
+
+That is the whole setup. `/api/openapi` and `/api/docs` come from the
+defaults, tags are inferred from the router tree, and `finish()` also
+returns the document as `_document` for logging or client generation.
+
+See [`examples/basic.rs`](examples/basic.rs) for a longer runnable version
+with query parameters, status codes, security schemes, and explicit tags.
 
 ## What is captured
 
@@ -100,8 +133,8 @@ Router::<()>::new()
 
 ### Tags from the router tree
 
-Tags need no annotation. Enable inference once on the root router and every
-operation is grouped by the routers it was nested through:
+Tags need no annotation. Every operation is grouped by the routers it was
+nested through:
 
 ```rust
 let auth = Router::<()>::new()
@@ -117,12 +150,14 @@ let wx = Router::<()>::new()
 Router::<()>::new()
     .nest("/api/auth", auth)
     .nest("/api/wx", wx)
-    .infer_tags()
     .finish();
 // `/api/auth/login`    -> `auth`
 // `/api/wx/auth/login` -> `wx/auth`
 // `/api/wx/device/…`   -> `wx/device`
 ```
+
+Call `Router::without_infer_tags()` when path-derived groups do not match the
+API's vocabulary and every operation is tagged explicitly.
 
 The prefix shared by every nested router (`/api` above) is treated as the API
 root and removed. Two edge cases follow from that rule:
@@ -155,6 +190,27 @@ post(webhook)
     .raw_body("application/cloudevents+json", true, json!({ "type": "object" }));
 ```
 
+### Publishing the documentation
+
+There is nothing to wire. `finish()` mounts the JSON document at
+`/api/openapi` and, with the `swagger-ui` feature, the UI at `/api/docs`.
+Turn them off at runtime without changing how the document is built —
+`finish()` still returns it, so startup logging, client generation, and tests
+keep working:
+
+```rust
+let publish_docs = std::env::var("OPENAPI_ENABLED").is_ok_and(|value| value != "false");
+
+let api = Router::<()>::new()
+    .route("/users", get(list_users))
+    .documentation(publish_docs);
+```
+
+`documentation(false)` leaves both routes unmounted; requests to them fall
+through to whatever fallback the application installs (usually a 404). The
+default paths are exported as `DEFAULT_DOCUMENT_PATH` and `DEFAULT_DOCS_PATH`
+and can be replaced with `.openapi_json_route(..)` / `.swagger_ui(..)`.
+
 ### Routes outside the document
 
 `merge_undocumented` and `nest_undocumented` mount a plain `axum::Router`
@@ -186,7 +242,9 @@ Custom extractors and response wrappers can participate in the document by imple
 
 ## Features
 
-- `swagger-ui` — serve a Swagger UI page backed by the generated OpenAPI JSON:
+- `swagger-ui` — serve a Swagger UI page backed by the generated OpenAPI JSON.
+  Nothing to configure: the page is mounted at `/api/docs` and reads the
+  document from `/api/openapi`. Custom paths:
 
   ```rust
   let api = Router::<()>::new()
@@ -237,6 +295,7 @@ TRYBUILD=overwrite cargo test --test compile
 - Handler bodies and branch conditions are not analyzed. Use `.response::<T>(status)`, `.empty_response(...)`, or `.raw_response(...)` for business-specific statuses.
 - A bare `StatusCode` response documents a `default` response, not its possible concrete codes.
 - `route_service`, `fallback`, and `method_not_allowed_fallback` handlers are not documented.
+- The documentation routes are mounted by default at `/api/openapi` and `/api/docs`. Registering your own handler at either path panics as a duplicate route; call `documentation(false)` or change the paths with `openapi_json_route` / `swagger_ui` instead.
 - Only routes registered through this crate's `Router` are visible; there is no reflection over a finished `axum::Router`.
 - Recursive schemas cannot be inlined into path/query parameters (the generator panics with an explanatory message). Use a scalar identifier for those routes.
 - `CONNECT` is not supported because OpenAPI path items have no `connect` operation.

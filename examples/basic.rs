@@ -5,7 +5,7 @@
 //! ```text
 //! cargo run --example basic
 //! curl http://127.0.0.1:3000/users/42
-//! curl http://127.0.0.1:3000/openapi.json
+//! curl http://127.0.0.1:3000/api/openapi
 //! ```
 
 use axum::extract::{Path, Query};
@@ -97,8 +97,11 @@ async fn main() {
                 .security("bearer")
                 .response::<User>(200)
                 .empty_response(404, "Not Found"),
-        )
-        .openapi_json_route("/openapi.json");
+        );
+    // The document and Swagger UI are published automatically at
+    // `/api/openapi` and `/api/docs`; call `.documentation(false)` to
+    // withhold them or `.openapi_json_route(..)` / `.swagger_ui(..)` to
+    // change the paths.
 
     let (app, document) = api.finish();
 
@@ -108,7 +111,7 @@ async fn main() {
         .await
         .expect("bind 127.0.0.1:3000");
     println!("listening on http://127.0.0.1:3000");
-    println!("OpenAPI JSON: http://127.0.0.1:3000/openapi.json");
+    println!("OpenAPI JSON: http://127.0.0.1:3000/api/openapi");
 
     axum::serve(listener, app).await.expect("server error");
 }
