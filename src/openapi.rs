@@ -369,6 +369,15 @@ fn inferred_tag(
         }
     }
 
+    // Every operation shares the whole chain, so stripping the shared prefix
+    // would leave no group at all. Keep the innermost router name: an API
+    // that only serves `/api/wx/auth` is documented as `auth`, not as one tag
+    // per route. A chain of a single segment is just the API root, so those
+    // routes fall through to their path instead.
+    if nest_path.len() > 1 {
+        return nest_path.last().cloned();
+    }
+
     // Registered directly on the outermost router: use the first static
     // segment after the shared prefix (e.g. `/api/health` -> `health`).
     let mut segments = documented_path.split('/').filter(|s| !s.is_empty());

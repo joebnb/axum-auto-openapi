@@ -108,22 +108,33 @@ let auth = Router::<()>::new()
     .route("/login", post(login))
     .route("/me", get(me));
 
+let wx_auth = Router::<()>::new().route("/login", post(wx_login));
+
 let wx = Router::<()>::new()
-    .nest("/auth", auth)
+    .nest("/auth", wx_auth)
     .nest("/device", device);
 
 Router::<()>::new()
-    .nest("/api", wx)
+    .nest("/api/auth", auth)
+    .nest("/api/wx", wx)
     .infer_tags()
     .finish();
-// every operation under `/api/wx/auth` is tagged `wx/auth`
-// every operation under `/api/wx/device` is tagged `wx/device`
+// `/api/auth/login`    -> `auth`
+// `/api/wx/auth/login` -> `wx/auth`
+// `/api/wx/device/…`   -> `wx/device`
 ```
 
-The outermost prefix shared by every nested router (`/api` above) is treated as
-the API root and removed. Routes registered directly on the root router fall
-back to their first static path segment. An operation that already has a tag —
-from `.tag("…")` or `.default_tag("…")` — keeps it.
+The prefix shared by every nested router (`/api` above) is treated as the API
+root and removed. Two edge cases follow from that rule:
+
+- When every operation shares its whole nest chain, the innermost router name
+  is used, so an API that only serves `/api/wx/auth` is tagged `auth` rather
+  than one tag per route.
+- Routes registered directly on the root router fall back to their first
+  static path segment (`/api/health` -> `health`).
+
+An operation that already has a tag — from `.tag("…")` or `.default_tag("…")` —
+keeps it.
 
 `Router::default_tag` remains available for cases where the router tree does
 not express the grouping: it tags every untagged operation on that router,
@@ -207,6 +218,7 @@ The test suite covers the generated document from several angles:
 - `tests/http.rs` sends real requests through axum with `tower::ServiceExt::oneshot`, so the documented surface is checked against actual routing behavior.
 - `tests/validation.rs` parses every generated document with the `oas3` OpenAPI 3.1 implementation and verifies that all internal `$ref` pointers resolve.
 - `tests/compile.rs` uses `trybuild` to pin the diagnostics for unsupported extractors and return types.
+- `tests/swagger.rs` checks the `swagger-ui` feature: the UI page, the spec route, and reuse of an explicit OpenAPI route.
 
 The document snapshot lives at `tests/fixtures/basic.json`. After an intentional output change, regenerate it and review the diff:
 

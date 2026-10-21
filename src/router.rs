@@ -444,18 +444,24 @@ where
     /// router nesting structure.
     ///
     /// The tag is the static nest path leading to the operation, with the
-    /// prefix shared by every nested router removed. Nesting `auth` under
-    /// `/api` and then mounting it at `/wx` produces the tag `wx/auth`;
-    /// routes registered directly on the top-level router fall back to their
-    /// first static path segment.
+    /// prefix shared by every nested router removed. A storefront `auth`
+    /// router and a Mini Program `wx/auth` router mounted under `/api` are
+    /// tagged `auth` and `wx/auth`. When every operation shares its whole
+    /// chain, the innermost router name is used instead, and routes
+    /// registered directly on the top-level router fall back to their first
+    /// static path segment.
     ///
     /// ```rust,no_run
     /// # use axum_openapi::{Router, routing::get};
     /// # async fn login() {}
+    /// # async fn wx_login() {}
     /// let auth = Router::<()>::new().route("/login", get(login));
+    /// let wx_auth = Router::<()>::new().route("/login", get(wx_login));
+    /// let wx = Router::<()>::new().nest("/auth", wx_auth);
     /// let api = Router::<()>::new()
-    ///     .nest("/wx/auth", auth)
-    ///     .infer_tags();          // -> tag "wx/auth"
+    ///     .nest("/api/auth", auth)
+    ///     .nest("/api/wx", wx)
+    ///     .infer_tags();          // -> tags "auth" and "wx/auth"
     /// # let _ = api;
     /// ```
     ///
