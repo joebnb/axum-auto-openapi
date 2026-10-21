@@ -127,6 +127,45 @@ impl<S> ApiMethodRouter<S> {
         self
     }
 
+    /// Document a JSON request body with an explicit type.
+    ///
+    /// Handlers that read the body themselves (for example a `Bytes` body
+    /// parsed after route-specific validation) are otherwise documented as
+    /// `application/octet-stream`. Declaring the type here documents what the
+    /// handler actually accepts and replaces any body inferred from the
+    /// extractors.
+    ///
+    /// ```rust,no_run
+    /// # use axum_openapi::routing::post;
+    /// # use schemars::JsonSchema;
+    /// # use serde::Deserialize;
+    /// # #[derive(Deserialize, JsonSchema)]
+    /// # struct Login { email: String }
+    /// # async fn login(_: axum::body::Bytes) {}
+    /// let route: axum_openapi::ApiMethodRouter = post(login).json_body::<Login>();
+    /// # let _ = route;
+    /// ```
+    pub fn json_body<T: JsonSchema + 'static>(mut self) -> Self {
+        self.current().describe_json_body::<T>();
+        self
+    }
+
+    /// Replace the documented request body with an arbitrary content type and
+    /// JSON Schema.
+    ///
+    /// Use this for webhooks and other bodies whose wire format is not
+    /// expressed by the handler's extractors.
+    pub fn raw_body(
+        mut self,
+        content_type: impl Into<String>,
+        required: bool,
+        schema: serde_json::Value,
+    ) -> Self {
+        self.current()
+            .describe_raw_body(content_type, required, schema);
+        self
+    }
+
     pub(crate) fn into_parts(self) -> (AxumMethodRouter<S>, Vec<(String, OperationDescriptor)>) {
         (self.inner, self.operations)
     }

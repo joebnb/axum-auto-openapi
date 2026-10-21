@@ -61,6 +61,8 @@ pub struct Router<S = ()> {
     tags: Vec<Tag>,
     security_schemes: BTreeMap<String, Value>,
     openapi_route: Option<String>,
+    default_tag: Option<String>,
+    infer_tags: bool,
     #[cfg(feature = "swagger-ui")]
     swagger: Option<SwaggerConfig>,
     _marker: PhantomData<fn() -> S>,
@@ -92,6 +94,8 @@ where
             tags: Vec::new(),
             security_schemes: BTreeMap::new(),
             openapi_route: None,
+            default_tag: None,
+            infer_tags: false,
             #[cfg(feature = "swagger-ui")]
             swagger: None,
             _marker: PhantomData,
@@ -112,7 +116,12 @@ where
         let (inner, operations) = method_router.into_parts();
         {
             let path_item = self.paths.entry(path.to_owned()).or_default();
-            for (method, operation) in operations {
+            for (method, mut operation) in operations {
+                if let Some(tag) = &self.default_tag {
+                    if operation.tags.is_empty() {
+                        operation.tag(tag.clone());
+                    }
+                }
                 if path_item.insert(method.clone(), operation).is_some() {
                     panic!("duplicate OpenAPI operation `{method}` for path `{path}`");
                 }
@@ -146,10 +155,17 @@ where
 
         self.inner = self.inner.nest(path, inner);
 
+        let nested_segments = static_segments(path);
+
         for (inner_path, operations) in paths {
             let full_path = join_nested_path(path, &inner_path);
             let path_item = self.paths.entry(full_path.clone()).or_default();
-            for (method, operation) in operations {
+            for (method, mut operation) in operations {
+                if !nested_segments.is_empty() {
+                    let mut chain = nested_segments.clone();
+                    chain.append(&mut operation.nest_path);
+                    operation.nest_path = chain;
+                }
                 if path_item.insert(method.clone(), operation).is_some() {
                     panic!(
                         "duplicate OpenAPI operation `{method}` for path `{full_path}` after \
@@ -199,6 +215,29 @@ where
         self
     }
 
+    /// Merge a plain [`axum::Router`] whose routes are not documented.
+    ///
+    /// This keeps incremental adoption possible: a service can move its
+    /// routes onto [`crate::routing`] one module at a time, or deliberately
+    /// leave routes out of the document (for example WebSocket upgrades or
+    /// opaque proxy endpoints) without splitting the application into two
+    /// top-level routers.
+    ///
+    /// Undocumented routes are still served; they simply do not appear in
+    /// `paths`. Duplicate routes are rejected by axum itself.
+    pub fn merge_undocumented(mut self, router: axum::Router<S>) -> Self {
+        self.inner = self.inner.merge(router);
+        self
+    }
+
+    /// Nest a plain [`axum::Router`] below `path` without documenting it.
+    ///
+    /// See [`merge_undocumented`](Self::merge_undocumented).
+    pub fn nest_undocumented(mut self, path: &str, router: axum::Router<S>) -> Self {
+        self.inner = self.inner.nest(path, router);
+        self
+    }
+
     /// Provide the state for `Router<S>` and return the now-stateless router
     /// type (usually `Router<()>`).
     pub fn with_state<S2>(self, state: S) -> Router<S2> {
@@ -210,6 +249,8 @@ where
             tags: self.tags,
             security_schemes: self.security_schemes,
             openapi_route: self.openapi_route,
+            default_tag: self.default_tag,
+            infer_tags: self.infer_tags,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -236,6 +277,8 @@ where
             tags: self.tags,
             security_schemes: self.security_schemes,
             openapi_route: self.openapi_route,
+            default_tag: self.default_tag,
+            infer_tags: self.infer_tags,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -262,6 +305,8 @@ where
             tags: self.tags,
             security_schemes: self.security_schemes,
             openapi_route: self.openapi_route,
+            default_tag: self.default_tag,
+            infer_tags: self.infer_tags,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -283,6 +328,8 @@ where
             tags: self.tags,
             security_schemes: self.security_schemes,
             openapi_route: self.openapi_route,
+            default_tag: self.default_tag,
+            infer_tags: self.infer_tags,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -304,6 +351,8 @@ where
             tags: self.tags,
             security_schemes: self.security_schemes,
             openapi_route: self.openapi_route,
+            default_tag: self.default_tag,
+            infer_tags: self.infer_tags,
             #[cfg(feature = "swagger-ui")]
             swagger: self.swagger,
             _marker: PhantomData,
@@ -322,6 +371,7 @@ where
             self.tags,
             self.security_schemes,
             self.paths,
+            self.infer_tags,
         );
 
         let mut inner = self.inner;
@@ -390,6 +440,63 @@ where
         self
     }
 
+    /// Derive a tag for every operation that has no tag of its own from the
+    /// router nesting structure.
+    ///
+    /// The tag is the static nest path leading to the operation, with the
+    /// prefix shared by every nested router removed. Nesting `auth` under
+    /// `/api` and then mounting it at `/wx` produces the tag `wx/auth`;
+    /// routes registered directly on the top-level router fall back to their
+    /// first static path segment.
+    ///
+    /// ```rust,no_run
+    /// # use axum_openapi::{Router, routing::get};
+    /// # async fn login() {}
+    /// let auth = Router::<()>::new().route("/login", get(login));
+    /// let api = Router::<()>::new()
+    ///     .nest("/wx/auth", auth)
+    ///     .infer_tags();          // -> tag "wx/auth"
+    /// # let _ = api;
+    /// ```
+    ///
+    /// Explicit tags ([`routing::ApiMethodRouter::tag`](crate::routing::ApiMethodRouter::tag)
+    /// or [`default_tag`](Self::default_tag)) and security metadata are
+    /// unaffected.
+    pub fn infer_tags(mut self) -> Self {
+        self.infer_tags = true;
+        self
+    }
+
+    /// Tag every operation on this router that has no tag of its own.
+    ///
+    /// Tagging happens when operations are registered, so routers that are
+    /// nested or merged afterwards keep their tags. Call this after building
+    /// a sub-router to group its operations in generated documentation:
+    ///
+    /// ```rust,no_run
+    /// # use axum_openapi::{Router, routing::get};
+    /// # async fn list_products() {}
+    /// let products = Router::<()>::new()
+    ///     .route("/products", get(list_products))
+    ///     .default_tag("products");
+    /// # let _ = products;
+    /// ```
+    ///
+    /// The default tag also applies to routes registered on this router
+    /// after the call. It never overrides a tag set on the operation itself.
+    pub fn default_tag(mut self, tag: impl Into<String>) -> Self {
+        let tag = tag.into();
+        for operations in self.paths.values_mut() {
+            for operation in operations.values_mut() {
+                if operation.tags.is_empty() {
+                    operation.tag(tag.clone());
+                }
+            }
+        }
+        self.default_tag = Some(tag);
+        self
+    }
+
     /// Register a security scheme under `components.securitySchemes`.
     pub fn security_scheme(mut self, name: impl Into<String>, scheme: SecurityScheme) -> Self {
         self.insert_security_scheme(name.into(), scheme.into_value());
@@ -436,6 +543,17 @@ where
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Static segments of a nest path, in order.
+///
+/// Parameter segments (`{id}`) are skipped: they identify a resource rather
+/// than a router grouping.
+fn static_segments(path: &str) -> Vec<String> {
+    path.split('/')
+        .filter(|segment| !segment.is_empty() && !segment.starts_with('{'))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Mirror axum's `path_for_nested_route` behavior so documented paths match

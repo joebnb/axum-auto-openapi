@@ -148,6 +148,10 @@ pub struct OperationDescriptor {
     pub(crate) description: Option<String>,
     pub(crate) operation_id: Option<String>,
     pub(crate) tags: Vec<String>,
+    /// Statically nested path segments, outermost first, recorded when the
+    /// router is nested. Used to infer a tag from the router structure when
+    /// no explicit tag was set.
+    pub(crate) nest_path: Vec<String>,
     pub(crate) deprecated: bool,
     pub(crate) security: Vec<Value>,
     pub(crate) parameter_groups: Vec<ParameterGroup>,
@@ -163,6 +167,7 @@ impl OperationDescriptor {
             description: None,
             operation_id: None,
             tags: Vec::new(),
+            nest_path: Vec::new(),
             deprecated: false,
             security: Vec::new(),
             parameter_groups: Vec::new(),

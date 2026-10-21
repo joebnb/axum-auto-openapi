@@ -56,7 +56,9 @@
 //!
 //! Business-specific status codes, security requirements, summaries and tags
 //! can be added fluently on [`routing::ApiMethodRouter`] or through
-//! [`OperationDescriptor`].
+//! [`OperationDescriptor`]. Tags can also be derived from the router tree with
+//! [`Router::infer_tags`], and a handler that parses its own `Bytes` body can
+//! declare the real shape with [`routing::ApiMethodRouter::json_body`].
 //!
 //! ## What is not captured
 //!

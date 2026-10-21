@@ -64,7 +64,7 @@ curl http://127.0.0.1:3000/openapi.json
 | `Path<T>` | Path parameters for scalars, tuples, arrays, and structs |
 | `Query<T>` | One query parameter per object property, including `required`, arrays, and `deepObject` objects |
 | `State<T>`, `Extension<T>`, `HeaderMap`, `Method`, `Uri`, `RawQuery`, `ConnectInfo<T>`, `Request` | Recognized but contribute no parameters |
-| `Bytes` / `String` input | Binary / text request body |
+| `Bytes` / `String` input | Binary / text request body (declare the real shape with `.json_body::<T>()`) |
 | `String`, `&'static str`, `Html<_>`, `Bytes`, `Response` output | Text, HTML, binary, or opaque response |
 | `Result<T, E>` | Success and error branches (error uses `default` unless you add a status) |
 | `StatusCode`, `(StatusCode, T)` | `default` response, because the status is only known at runtime |
@@ -98,9 +98,80 @@ Router::<()>::new()
     .security_scheme("bearer", SecurityScheme::bearer());
 ```
 
-`Router::route`, `nest`, `merge`, `with_state`, `layer`, `route_layer`, `fallback`, and `method_not_allowed_fallback` mirror axum. Nested paths are prefixed exactly as axum does; duplicate `(path, method)` pairs panic at startup.
+### Tags from the router tree
 
-Custom extractors and response wrappers can participate in the document by implementing `ApiInput` and `ApiOutput` respectively. Handlers containing an unsupported extractor or return type fail to compile with a targeted diagnostic rather than silently emitting an incomplete document.
+Tags need no annotation. Enable inference once on the root router and every
+operation is grouped by the routers it was nested through:
+
+```rust
+let auth = Router::<()>::new()
+    .route("/login", post(login))
+    .route("/me", get(me));
+
+let wx = Router::<()>::new()
+    .nest("/auth", auth)
+    .nest("/device", device);
+
+Router::<()>::new()
+    .nest("/api", wx)
+    .infer_tags()
+    .finish();
+// every operation under `/api/wx/auth` is tagged `wx/auth`
+// every operation under `/api/wx/device` is tagged `wx/device`
+```
+
+The outermost prefix shared by every nested router (`/api` above) is treated as
+the API root and removed. Routes registered directly on the root router fall
+back to their first static path segment. An operation that already has a tag —
+from `.tag("…")` or `.default_tag("…")` — keeps it.
+
+`Router::default_tag` remains available for cases where the router tree does
+not express the grouping: it tags every untagged operation on that router,
+including ones registered after the call.
+
+### Bodies your handler parses itself
+
+A handler that takes `Bytes` or `String` and parses the payload is documented as
+`application/octet-stream` / `text/plain`, because its extractors cannot say
+more. Declare the actual body on the route instead:
+
+```rust
+post(login)                                    // fn login(raw: Bytes) -> ...
+    .json_body::<LoginBody>()                  // replaces the inferred body
+    .response_with::<Envelope>(200, "Signed in");
+
+post(webhook)
+    .raw_body("application/cloudevents+json", true, json!({ "type": "object" }));
+```
+
+### Routes outside the document
+
+`merge_undocumented` and `nest_undocumented` mount a plain `axum::Router`
+without adding operations. Use them for surfaces OpenAPI cannot describe —
+WebSocket upgrades, opaque proxies, static files — or to adopt the generator
+one module at a time:
+
+```rust
+let api = Router::<()>::new()
+    .nest("/api", documented_api)
+    .nest_undocumented("/api/iot", websocket_gateway);
+```
+
+### Checking the result
+
+`finish()` panics on mistakes that make the document unusable (malformed paths,
+unknown path parameters, duplicate routes). Softer problems are reported by
+`OpenApiDocument::warnings()` — an operation requiring a security scheme that
+was never registered, or duplicated `operationId`s:
+
+```rust
+let (app, document) = api.finish();
+for warning in document.warnings() {
+    tracing::warn!("openapi: {warning}");
+}
+```
+
+Custom extractors and response wrappers can participate in the document by implementing `ApiInput` and `ApiOutput` respectively. Their `describe` method receives an `OperationDescriptor`, so they can also declare security requirements (`operation.security("bearer")`) or a documented response. Handlers containing an unsupported extractor or return type fail to compile with a targeted diagnostic rather than silently emitting an incomplete document.
 
 ## Features
 

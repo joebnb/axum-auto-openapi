@@ -255,6 +255,67 @@ impl OpenApiDocument {
     pub fn to_json_pretty(&self) -> String {
         serde_json::to_string_pretty(&self.value).expect("OpenAPI documents serialize to JSON")
     }
+
+    /// Document problems that do not prevent generation but produce an
+    /// invalid or ambiguous document.
+    ///
+    /// Errors that make the document unusable (malformed paths, unknown path
+    /// parameters) already panic in [`crate::Router::finish`]. This reports the
+    /// softer cases an application should surface in its startup log:
+    ///
+    /// - an operation requires a security scheme that was never registered;
+    /// - two operations share an `operationId`, which breaks client
+    ///   generators and tooling that keys on it.
+    ///
+    /// The returned messages are empty when the document is consistent.
+    pub fn warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        let registered: Vec<&str> = self
+            .value
+            .pointer("/components/securitySchemes")
+            .and_then(Value::as_object)
+            .map(|schemes| schemes.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+
+        let mut operation_ids: BTreeMap<&str, String> = BTreeMap::new();
+
+        if let Some(paths) = self.value.get("paths").and_then(Value::as_object) {
+            for (path, item) in paths {
+                let Some(operations) = item.as_object() else {
+                    continue;
+                };
+                for (method, operation) in operations {
+                    for requirement in operation
+                        .get("security")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                    {
+                        for scheme in requirement.as_object().into_iter().flat_map(Map::keys) {
+                            if !registered.contains(&scheme.as_str()) {
+                                warnings.push(format!(
+                                    "{method_upper} {path} requires unregistered security scheme `{scheme}`",
+                                    method_upper = method.to_uppercase()
+                                ));
+                            }
+                        }
+                    }
+
+                    if let Some(operation_id) = operation.get("operationId").and_then(Value::as_str)
+                    {
+                        if let Some(previous) = operation_ids.insert(operation_id, path.clone()) {
+                            warnings.push(format!(
+                                "duplicate operationId `{operation_id}` on {previous} and {path}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        warnings
+    }
 }
 
 impl fmt::Display for OpenApiDocument {
@@ -263,23 +324,95 @@ impl fmt::Display for OpenApiDocument {
     }
 }
 
+/// Nest segments shared by every nested operation, outermost first.
+///
+/// Nesting everything under `/api` is an implementation detail, not a
+/// grouping, so that prefix is removed from inferred tags. Routes that were
+/// never nested are ignored: they get a tag from their path instead.
+fn shared_nest_prefix(
+    paths: &BTreeMap<String, BTreeMap<String, OperationDescriptor>>,
+) -> Vec<String> {
+    let mut chains = paths
+        .values()
+        .flat_map(BTreeMap::values)
+        .map(|operation| operation.nest_path.as_slice())
+        .filter(|chain| !chain.is_empty());
+    let Some(first) = chains.next() else {
+        return Vec::new();
+    };
+
+    let mut prefix = first.to_vec();
+    for chain in chains {
+        let shared = chain
+            .iter()
+            .zip(prefix.iter())
+            .take_while(|(a, b)| a == b)
+            .count();
+        prefix.truncate(shared);
+        if prefix.is_empty() {
+            break;
+        }
+    }
+    prefix
+}
+
+/// The tag implied by the router structure, or by the path for routes that
+/// were never nested.
+fn inferred_tag(
+    documented_path: &str,
+    nest_path: &[String],
+    shared_prefix: &[String],
+) -> Option<String> {
+    if let Some(relative) = nest_path.strip_prefix(shared_prefix) {
+        if !relative.is_empty() {
+            return Some(relative.join("/"));
+        }
+    }
+
+    // Registered directly on the outermost router: use the first static
+    // segment after the shared prefix (e.g. `/api/health` -> `health`).
+    let mut segments = documented_path.split('/').filter(|s| !s.is_empty());
+    for _ in 0..shared_prefix.len() {
+        segments.next();
+    }
+    segments
+        .find(|segment| !segment.starts_with('{') && !segment.starts_with('*'))
+        .map(str::to_owned)
+}
+
 pub(crate) fn build_document(
     info: Info,
     servers: Vec<Server>,
     tags: Vec<Tag>,
     security_schemes: BTreeMap<String, Value>,
     paths: BTreeMap<String, BTreeMap<String, OperationDescriptor>>,
+    infer_tags: bool,
 ) -> OpenApiDocument {
     let mut registry = SchemaRegistry::default();
     let mut rendered_paths = Map::new();
+    let shared_nest_prefix = if infer_tags {
+        shared_nest_prefix(&paths)
+    } else {
+        Vec::new()
+    };
 
     for (path, operations) in &paths {
         let documented_path = params::documented_path(path);
         let mut path_item = Map::new();
         for (method, operation) in operations {
+            let mut operation = operation.clone();
+            if infer_tags && operation.tags.is_empty() {
+                if let Some(tag) = inferred_tag(
+                    &documented_path,
+                    operation.nest_path.as_slice(),
+                    &shared_nest_prefix,
+                ) {
+                    operation.tag(tag);
+                }
+            }
             path_item.insert(
                 method.clone(),
-                render_operation(&documented_path, operation, &mut registry),
+                render_operation(&documented_path, &operation, &mut registry),
             );
         }
         rendered_paths.insert(documented_path, Value::Object(path_item));
